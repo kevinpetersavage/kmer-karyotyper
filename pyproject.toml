@@ -1,0 +1,25 @@
+[project]
+name = "kmer-karyotyper"
+version = "0.1.0"
+description = "K-mer based karyotyping from FASTQ and CRAM sequence reads"
+authors = [
+    {name = "Developer"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch (>=2.0.0)",
+    "pysam (>=0.20.0)"
+]
+
+[project.scripts]
+kmer-karyotyper = "kmer_karyotyper.cli:main"
+kmer-train = "kmer_karyotyper.cli:train_cli"
+kmer-classify = "kmer_karyotyper.cli:classify_cli"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
