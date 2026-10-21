@@ -116,6 +116,69 @@ def test_parse_sample_arg():
     assert path == "HG00096"
     assert label == 1
 
+    # Minor sex karyotypes testing
+    path, label = parse_sample_arg("sample_turner.fastq:X0")
+    assert path == "sample_turner.fastq"
+    assert label == 2
+
+    path, label = parse_sample_arg("sample_turner.fastq:Turner")
+    assert path == "sample_turner.fastq"
+    assert label == 2
+
+    path, label = parse_sample_arg("sample_klinefelter.fastq:XXY")
+    assert path == "sample_klinefelter.fastq"
+    assert label == 4
+
+    path, label = parse_sample_arg("sample_pentasomy_x.fastq:XXXXX")
+    assert path == "sample_pentasomy_x.fastq"
+    assert label == 10
+
+    path, label = parse_sample_arg("sample_pentasomy_49.fastq:XXXXY")
+    assert path == "sample_pentasomy_49.fastq"
+    assert label == 11
+
+
+def test_cli_train_and_classify_minor_karyotypes(tmp_path, capsys):
+    # Create FASTQ files for multiple minor karyotypes: XX, XY, X0 (Turner), XXY (Klinefelter), XXXXX (Pentasomy X)
+    samples = {
+        "sample_XX.fastq": ("XX", "ACACACACACACACACACACACACACACAC"),
+        "sample_XY.fastq": ("XY", "GGGGGGCCCCCCGGGGGGCCCCCCGGGGGG"),
+        "sample_X0.fastq": ("X0", "AAAAAAAAAAAAAAACCCCCCCCCCCCCCC"),
+        "sample_XXY.fastq": ("XXY", "TTTTTTTTTTTTTTTGGGGGGGGGGGGGGG"),
+        "sample_XXXXX.fastq": ("XXXXX", "ATATATATATATATATATATATATATATAT"),
+    }
+
+    sample_args = []
+    for fname, (label_str, seq) in samples.items():
+        fpath = str(tmp_path / fname)
+        with open(fpath, "w") as f:
+            f.write(f"@READ1\n{seq}\n+\n" + "~" * len(seq) + "\n")
+        sample_args.append(f"{fpath}:{label_str}")
+
+    model_path = str(tmp_path / "minor_karyotypes_model.pt")
+
+    train_args = [
+        "--samples", *sample_args,
+        "--output-model", model_path,
+        "--k-size", "5",
+        "--epochs", "10",
+        "--max-vocab", "100"
+    ]
+    train_cli(train_args)
+    assert os.path.exists(model_path)
+
+    # Classify all samples
+    test_files = [item.split(":")[0] for item in sample_args]
+    classify_args = [
+        "--model", model_path,
+        "--samples", *test_files
+    ]
+    classify_cli(classify_args)
+
+    captured = capsys.readouterr()
+    assert "Classification Results" in captured.out
+    assert "Predicted Karyotype" in captured.out
+
 
 def test_model_training_and_serialization(sample_fastq_files, tmp_path):
     fq1, fq2 = sample_fastq_files

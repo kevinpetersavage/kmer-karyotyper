@@ -4,6 +4,7 @@
 
 It supports:
 - **Formats**: FASTQ (plain and gzipped `.fastq.gz`), BAM, SAM, and CRAM (`.cram`).
+- **Karyotypes**: Standard sex karyotypes (XX, XY) as well as minor sex karyotypes ranging from Turner syndrome (X0) through trisomies (XXX, XXY, XYY), tetrasomies (XXXX, XXXY, XXYY, XYYY), and pentasomies (XXXXX, XXXXY, XXXYY, XXYYY, XYYYY).
 - **Data Sources**: Local files, HTTP/HTTPS URLs, and built-in 1000 Genomes sample identifiers (e.g. `HG00096`, `HG00097`, `HG00099`, `HG00100`).
 - **Commands**: CLI scripts for training custom k-mer classifier models (`kmer-train` / `kmer-karyotyper train`) and classifying unknown samples (`kmer-classify` / `kmer-karyotyper classify`).
 
@@ -28,9 +29,9 @@ poetry install
 Train a classifier by providing labelled samples in the format `<source>:<label>`. Sources can be local FASTQ/CRAM paths, URLs, or 1000 Genomes identifiers.
 
 ```bash
-# Training with local FASTQ and CRAM files
+# Training with local FASTQ and CRAM files including minor sex karyotypes
 poetry run kmer-train \
-  --samples sample_XX.fastq:XX sample_XY.cram:XY \
+  --samples sample_XX.fastq:XX sample_XY.cram:XY sample_X0.fastq:X0 sample_XXY.fastq:XXY sample_XXXXX.fastq:XXXXX \
   --output-model model.pt \
   --k-size 31 \
   --max-vocab 1000 \
