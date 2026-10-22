@@ -4,10 +4,8 @@ Tests for kmer-karyotyper data loading, modeling, CLI, FASTQ, and CRAM processin
 
 import gzip
 import os
-import tempfile
 import pytest
 import pysam
-import torch
 
 from kmer_karyotyper.data import (
     get_kmers_from_sequence,

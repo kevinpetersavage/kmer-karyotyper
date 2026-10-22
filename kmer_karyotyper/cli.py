@@ -3,16 +3,13 @@ Command line interface for kmer-karyotyper training and classification.
 """
 
 import argparse
-import json
-import os
 import sys
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from kmer_karyotyper.data import is_url, get_1000_genomes_url
 from kmer_karyotyper.model import (
     KmerClassifier,
     KmerKaryotypeDataset,
@@ -116,18 +113,18 @@ def parse_sample_arg(sample_str: str) -> Tuple[str, Optional[Union[int, str]]]:
 
         if upper_label in REV_LABEL_MAP:
             return parts[0], REV_LABEL_MAP[upper_label]
-        elif possible_label.isdigit():
+        if possible_label.isdigit():
             return parts[0], int(possible_label)
-        else:
-            canon = canonicalize_karyotype(possible_label)
-            if canon and canon in REV_LABEL_MAP:
-                return parts[0], REV_LABEL_MAP[canon]
-            return parts[0], possible_label
+
+        canon = canonicalize_karyotype(possible_label)
+        if canon and canon in REV_LABEL_MAP:
+            return parts[0], REV_LABEL_MAP[canon]
+        return parts[0], possible_label
 
     return sample_str, None
 
 
-def train_cli(args_list: Optional[List[str]] = None) -> None:
+def _build_train_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Train a k-mer karyotyping model using FASTQ or CRAM sequence data."
     )
@@ -179,7 +176,11 @@ def train_cli(args_list: Optional[List[str]] = None) -> None:
         default=None,
         help="Optional FASTA reference for CRAM files."
     )
+    return parser
 
+
+def train_cli(args_list: Optional[List[str]] = None) -> None:
+    parser = _build_train_parser()
     args = parser.parse_args(args_list)
 
     filepaths = []
@@ -241,7 +242,7 @@ def train_cli(args_list: Optional[List[str]] = None) -> None:
     print(f"Model saved successfully to {args.output_model}")
 
 
-def classify_cli(args_list: Optional[List[str]] = None) -> None:
+def _build_classify_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Classify karyotype from FASTQ or CRAM sequence data using a trained model."
     )
@@ -269,7 +270,11 @@ def classify_cli(args_list: Optional[List[str]] = None) -> None:
         default=None,
         help="Optional FASTA reference for CRAM files."
     )
+    return parser
 
+
+def classify_cli(args_list: Optional[List[str]] = None) -> None:
+    parser = _build_classify_parser()
     args = parser.parse_args(args_list)
 
     model, kmer_to_idx, k_size, label_map = load_model(args.model)
@@ -305,8 +310,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="kmer-karyotyper CLI tool")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    train_parser = subparsers.add_parser("train", help="Train a k-mer karyotype classifier")
-    classify_parser = subparsers.add_parser("classify", help="Classify samples with a trained model")
+    subparsers.add_parser("train", help="Train a k-mer karyotype classifier")
+    subparsers.add_parser("classify", help="Classify samples with a trained model")
 
     if len(sys.argv) > 1 and sys.argv[1] == "train":
         train_cli(sys.argv[2:])
