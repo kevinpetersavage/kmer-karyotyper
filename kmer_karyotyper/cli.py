@@ -176,6 +176,25 @@ def _build_train_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional FASTA reference for CRAM files."
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["auto", "jellyfish", "python"],
+        default="auto",
+        help="K-mer counting backend ('auto', 'jellyfish', or 'python'). Default: 'auto'."
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of threads for k-mer counting (default: 1)."
+    )
+    parser.add_argument(
+        "--hash-size",
+        type=str,
+        default="10M",
+        help="Initial hash size for Jellyfish (default: 10M)."
+    )
     return parser
 
 
@@ -199,7 +218,10 @@ def train_cli(args_list: Optional[List[str]] = None) -> None:
         k=args.k_size,
         max_vocab_size=args.max_vocab,
         max_reads_per_sample=args.max_reads,
-        fasta_reference=args.fasta_ref
+        fasta_reference=args.fasta_ref,
+        backend=args.backend,
+        hash_size=args.hash_size,
+        threads=args.threads
     )
     print(f"Vocabulary created with {len(kmer_to_idx)} unique {args.k_size}-mers.")
 
@@ -209,7 +231,10 @@ def train_cli(args_list: Optional[List[str]] = None) -> None:
         kmer_to_idx=kmer_to_idx,
         k=args.k_size,
         max_reads_per_sample=args.max_reads,
-        fasta_reference=args.fasta_ref
+        fasta_reference=args.fasta_ref,
+        backend=args.backend,
+        hash_size=args.hash_size,
+        threads=args.threads
     )
 
     batch_size = min(4, len(filepaths))
@@ -270,6 +295,25 @@ def _build_classify_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional FASTA reference for CRAM files."
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["auto", "jellyfish", "python"],
+        default="auto",
+        help="K-mer counting backend ('auto', 'jellyfish', or 'python'). Default: 'auto'."
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="Number of threads for k-mer counting (default: 1)."
+    )
+    parser.add_argument(
+        "--hash-size",
+        type=str,
+        default="10M",
+        help="Initial hash size for Jellyfish (default: 10M)."
+    )
     return parser
 
 
@@ -287,7 +331,10 @@ def classify_cli(args_list: Optional[List[str]] = None) -> None:
         kmer_to_idx=kmer_to_idx,
         k=k_size,
         max_reads_per_sample=args.max_reads,
-        fasta_reference=args.fasta_ref
+        fasta_reference=args.fasta_ref,
+        backend=args.backend,
+        hash_size=args.hash_size,
+        threads=args.threads
     )
 
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)

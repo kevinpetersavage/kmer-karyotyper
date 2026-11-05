@@ -53,6 +53,9 @@ poetry run kmer-train \
 - `--lr`: Learning rate (default: `0.005`).
 - `--max-reads`: Optional limit on reads parsed per sample for faster processing.
 - `--fasta-ref`: Optional FASTA reference file if required for CRAM decompression.
+- `--backend`: K-mer counting backend: `auto`, `jellyfish`, or `python` (default: `auto`). Uses fast Jellyfish counter when available.
+- `--threads`: Number of threads for Jellyfish k-mer counting (default: `1`).
+- `--hash-size`: Initial hash size for Jellyfish (default: `10M`).
 
 ---
 
@@ -77,6 +80,9 @@ poetry run kmer-classify \
 - `--samples`: One or more sample paths, URLs, or 1000 Genomes IDs to classify.
 - `--max-reads`: Optional limit on reads parsed per sample.
 - `--fasta-ref`: Optional FASTA reference file for CRAM files.
+- `--backend`: K-mer counting backend: `auto`, `jellyfish`, or `python` (default: `auto`).
+- `--threads`: Number of threads for Jellyfish k-mer counting (default: `1`).
+- `--hash-size`: Initial hash size for Jellyfish (default: `10M`).
 
 ---
 

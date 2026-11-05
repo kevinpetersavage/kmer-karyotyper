@@ -740,6 +740,17 @@ files = [
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pyjellyfish"
+version = "1.3.1"
+description = "Python interface to the Jellfish DNA k-mer counter"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "pyjellyfish-1.3.1.tar.gz", hash = "sha256:f9ec8f126b82f2fd85d717b7fb8c80ee8095958d8da748b35e7dcbba5b3fd5de"},
+]
+
+[[package]]
 name = "pysam"
 version = "0.24.1"
 description = "Package for reading, manipulating, and writing genomic data"
@@ -1025,4 +1036,4 @@ markers = {dev = "python_version == \"3.10\""}
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10"
-content-hash = "8f96ecac3db6ab0f17e61dcc11d6c75df100d5715eb362e27f79bd3a55e754ce"
+content-hash = "33a799363a879b521738dab93f23f5d99968d0b3cdc461e475475f9d8aba8c50"
