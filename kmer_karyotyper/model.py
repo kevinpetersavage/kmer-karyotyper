@@ -8,12 +8,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
 
-from kmer_karyotyper.data import get_kmers_from_sequence, read_sequences
+from kmer_karyotyper.data import count_kmers, get_kmers_from_sequence, read_sequences
 
 
 class KmerKaryotypeDataset(Dataset):
     """
     Dataset that converts reads from FASTQ/CRAM files or URLs into k-mer count feature vectors.
+    Supports fast k-mer counting using Jellyfish or Python fallback.
     """
 
     def __init__(
@@ -23,7 +24,10 @@ class KmerKaryotypeDataset(Dataset):
         kmer_to_idx: Dict[str, int],
         k: int,
         max_reads_per_sample: Optional[int] = None,
-        fasta_reference: Optional[str] = None
+        fasta_reference: Optional[str] = None,
+        backend: str = "auto",
+        hash_size: str = "10M",
+        threads: int = 1
     ):
         self.filepaths = filepaths
         self.labels = labels
@@ -32,25 +36,29 @@ class KmerKaryotypeDataset(Dataset):
         self.vocab_size = len(kmer_to_idx)
         self.max_reads_per_sample = max_reads_per_sample
         self.fasta_reference = fasta_reference
+        self.backend = backend
+        self.hash_size = hash_size
+        self.threads = threads
 
     def __len__(self) -> int:
         return len(self.filepaths)
 
     def extract_features(self, filepath: str) -> torch.Tensor:
-        counts = collections.Counter()
-        sequences = read_sequences(
+        counts = count_kmers(
             filepath,
+            k=self.k,
+            backend=self.backend,
+            hash_size=self.hash_size,
+            threads=self.threads,
             max_reads=self.max_reads_per_sample,
             fasta_reference=self.fasta_reference
         )
-        for seq in sequences:
-            kmers = get_kmers_from_sequence(seq, self.k)
-            counts.update(kmers)
 
         feature_vector = torch.zeros(self.vocab_size, dtype=torch.float32)
         for kmer, count in counts.items():
-            if kmer in self.kmer_to_idx:
-                feature_vector[self.kmer_to_idx[kmer]] = count
+            idx = self.kmer_to_idx.get(kmer)
+            if idx is not None:
+                feature_vector[idx] = count
 
         return feature_vector
 
@@ -94,17 +102,28 @@ def build_kmer_vocabulary(
     k: int,
     max_vocab_size: Optional[int] = 1000,
     max_reads_per_sample: Optional[int] = None,
-    fasta_reference: Optional[str] = None
+    fasta_reference: Optional[str] = None,
+    backend: str = "auto",
+    hash_size: str = "10M",
+    threads: int = 1
 ) -> Dict[str, int]:
     """
     Build a k-mer vocabulary mapping (kmer -> idx) from a list of sample files/URLs.
     Optionally select top max_vocab_size most common k-mers across all samples.
+    Uses fast Jellyfish k-mer counter when available.
     """
     all_kmer_counts = collections.Counter()
     for filepath in filepaths:
-        for seq in read_sequences(filepath, max_reads=max_reads_per_sample, fasta_reference=fasta_reference):
-            kmers = get_kmers_from_sequence(seq, k)
-            all_kmer_counts.update(kmers)
+        sample_counts = count_kmers(
+            filepath,
+            k=k,
+            backend=backend,
+            hash_size=hash_size,
+            threads=threads,
+            max_reads=max_reads_per_sample,
+            fasta_reference=fasta_reference
+        )
+        all_kmer_counts.update(sample_counts)
 
     if max_vocab_size and len(all_kmer_counts) > max_vocab_size:
         most_common = [kmer for kmer, _ in all_kmer_counts.most_common(max_vocab_size)]

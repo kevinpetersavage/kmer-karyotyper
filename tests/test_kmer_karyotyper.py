@@ -12,7 +12,8 @@ from kmer_karyotyper.data import (
     read_fastq_sequences,
     read_cram_sequences,
     read_sequences,
-    get_1000_genomes_url
+    get_1000_genomes_url,
+    count_kmers
 )
 from kmer_karyotyper.model import (
     KmerClassifier,
@@ -178,6 +179,46 @@ def test_cli_train_and_classify_minor_karyotypes(tmp_path, capsys):
     assert "Predicted Karyotype" in captured.out
 
 
+def test_count_kmers_backends(sample_fastq_files, sample_sam_file):
+    fq1, fq2 = sample_fastq_files
+
+    # Fastq plain
+    c_py = count_kmers(fq1, k=5, backend="python")
+    c_jf = count_kmers(fq1, k=5, backend="jellyfish")
+    assert c_py == c_jf
+    assert len(c_jf) > 0
+
+    # Fastq.gz
+    c_py_gz = count_kmers(fq2, k=5, backend="python")
+    c_jf_gz = count_kmers(fq2, k=5, backend="jellyfish")
+    assert c_py_gz == c_jf_gz
+    assert len(c_jf_gz) > 0
+
+    # SAM / CRAM stream to Jellyfish
+    c_sam_py = count_kmers(sample_sam_file, k=4, backend="python")
+    c_sam_jf = count_kmers(sample_sam_file, k=4, backend="jellyfish")
+    assert c_sam_py == c_sam_jf
+    assert len(c_sam_jf) > 0
+
+
+def test_large_vocab_jellyfish(sample_fastq_files):
+    fq1, fq2 = sample_fastq_files
+    vocab = build_kmer_vocabulary([fq1, fq2], k=5, max_vocab_size=10000, backend="jellyfish")
+    assert len(vocab) > 0
+
+    dataset = KmerKaryotypeDataset(
+        [fq1, fq2],
+        labels=[0, 1],
+        kmer_to_idx=vocab,
+        k=5,
+        backend="jellyfish"
+    )
+    feat0, lbl0 = dataset[0]
+    assert feat0.shape[0] == len(vocab)
+    assert lbl0.item() == 0
+    assert feat0.sum() > 0
+
+
 def test_model_training_and_serialization(sample_fastq_files, tmp_path):
     fq1, fq2 = sample_fastq_files
     filepaths = [fq1, fq2]
@@ -228,10 +269,28 @@ def test_cli_train_and_classify_e2e(sample_fastq_files, tmp_path, capsys):
     # Run classify CLI
     classify_args = [
         "--model", model_path,
-        "--samples", fq1, fq2
+        "--samples", fq1, fq2,
+        "--backend", "jellyfish"
     ]
     classify_cli(classify_args)
 
     captured = capsys.readouterr()
     assert "Classification Results" in captured.out
     assert "Predicted Karyotype" in captured.out
+
+
+def test_cli_train_with_jellyfish(sample_fastq_files, tmp_path, capsys):
+    fq1, fq2 = sample_fastq_files
+    model_path = str(tmp_path / "jf_model.pt")
+
+    train_args = [
+        "--samples", f"{fq1}:XX", f"{fq2}:XY",
+        "--output-model", model_path,
+        "--k-size", "5",
+        "--max-vocab", "1000",
+        "--backend", "jellyfish",
+        "--threads", "2",
+        "--hash-size", "10M"
+    ]
+    train_cli(train_args)
+    assert os.path.exists(model_path)

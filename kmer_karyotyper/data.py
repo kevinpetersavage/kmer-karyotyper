@@ -5,8 +5,11 @@ as well as fetching 1000 Genomes data or remote URLs.
 
 import gzip
 import os
+import shutil
+import subprocess
+import tempfile
 import urllib.request
-from typing import Generator, List, Optional
+from typing import Dict, Generator, List, Optional
 import pysam
 
 DEFAULT_CACHE_DIR = "/tmp/kmer_karyotyper_cache"
@@ -166,3 +169,118 @@ def get_kmers_from_sequence(sequence: str, k: int) -> List[str]:
     if 'N' in seq or len(seq) < k:
         return []
     return [seq[i : i + k] for i in range(len(seq) - k + 1)]
+
+
+def count_kmers(
+    source: str,
+    k: int,
+    backend: str = "auto",
+    hash_size: str = "10M",
+    threads: int = 1,
+    canonical: bool = False,
+    max_reads: Optional[int] = None,
+    fasta_reference: Optional[str] = None,
+    cache_dir: Optional[str] = None
+) -> Dict[str, int]:
+    """
+    Count k-mers in a sequence file or URL using Jellyfish (fast) or Python fallback.
+
+    Args:
+        source: File path, URL, or 1000G sample identifier.
+        k: K-mer size.
+        backend: 'auto' (use jellyfish if available, otherwise python), 'jellyfish', or 'python'.
+        hash_size: Jellyfish initial hash size (e.g. '10M', '100M').
+        threads: Number of threads for Jellyfish counting.
+        canonical: Whether to count canonical k-mers (both strands).
+        max_reads: Optional limit on number of reads to count.
+        fasta_reference: FASTA reference file if required for CRAM.
+        cache_dir: Directory to cache downloaded URLs.
+
+    Returns:
+        Dict mapping k-mer strings to their occurrence counts.
+    """
+    use_jellyfish = False
+    if backend == "jellyfish":
+        use_jellyfish = True
+    elif backend == "auto":
+        use_jellyfish = shutil.which("jellyfish") is not None
+
+    if not use_jellyfish:
+        import collections
+        counts = collections.Counter()
+        for seq in read_sequences(source, max_reads=max_reads, fasta_reference=fasta_reference, cache_dir=cache_dir):
+            counts.update(get_kmers_from_sequence(seq, k))
+        return dict(counts)
+
+    jf_bin = shutil.which("jellyfish")
+    if not jf_bin:
+        raise RuntimeError("Jellyfish backend requested but 'jellyfish' executable was not found.")
+
+    local_path = _resolve_local_path(source, cache_dir=cache_dir)
+    lower = local_path.lower()
+    is_direct_fastq = lower.endswith((".fastq", ".fq")) and max_reads is None
+    is_gz_fastq = lower.endswith((".fastq.gz", ".fq.gz")) and max_reads is None
+
+    with tempfile.NamedTemporaryFile(suffix=".jf", delete=False) as tmp_jf:
+        jf_out = tmp_jf.name
+
+    try:
+        base_cmd = [jf_bin, "count", "-m", str(k), "-s", str(hash_size), "-t", str(threads), "-o", jf_out]
+        if canonical:
+            base_cmd.append("-C")
+
+        if is_direct_fastq:
+            cmd = base_cmd + [local_path]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode != 0:
+                raise RuntimeError(f"Jellyfish counting failed: {res.stderr}")
+        elif is_gz_fastq:
+            cmd = base_cmd + ["/dev/fd/0"]
+            decompress_cmd = ["gzip", "-dc", local_path]
+            decomp_proc = subprocess.Popen(decompress_cmd, stdout=subprocess.PIPE)
+            jf_proc = subprocess.run(cmd, stdin=decomp_proc.stdout, capture_output=True)
+            decomp_proc.stdout.close()
+            decomp_proc.wait()
+            if jf_proc.returncode != 0:
+                raise RuntimeError(f"Jellyfish counting failed: {jf_proc.stderr.decode('utf-8', errors='replace')}")
+        else:
+            cmd = base_cmd + ["/dev/fd/0"]
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, text=True, stderr=subprocess.PIPE)
+            seq_gen = read_sequences(
+                source,
+                max_reads=max_reads,
+                fasta_reference=fasta_reference,
+                cache_dir=cache_dir
+            )
+            fasta_input = []
+            for i, seq in enumerate(seq_gen):
+                if 'N' not in seq.upper():
+                    fasta_input.append(f">r{i}\n{seq}\n")
+            _, stderr = proc.communicate(input="".join(fasta_input))
+            if proc.returncode != 0:
+                raise RuntimeError(f"Jellyfish counting failed: {stderr}")
+
+        # Read counts from Jellyfish output
+        try:
+            import dna_jellyfish
+            reader = dna_jellyfish.ReadMerFile(jf_out)
+            counts = {str(mer): cnt for mer, cnt in reader}
+            del reader
+        except ImportError:
+            dump_proc = subprocess.Popen([jf_bin, "dump", "-c", "-t", jf_out], stdout=subprocess.PIPE, text=True)
+            counts = {}
+            for line in dump_proc.stdout:
+                line = line.strip()
+                if line:
+                    parts = line.split()
+                    if len(parts) == 2:
+                        counts[parts[0]] = int(parts[1])
+            dump_proc.wait()
+
+        return counts
+    finally:
+        if os.path.exists(jf_out):
+            try:
+                os.remove(jf_out)
+            except OSError:
+                pass
